@@ -50,6 +50,58 @@ defaults write com.apple.HIToolbox AppleFnUsageType -int 0
 
 ---
 
+## Local Transcription Models
+
+Dictara supports offline speech-to-text using locally downloaded models. No internet connection required after download.
+
+### Available Models
+
+#### Parakeet Models (NVIDIA)
+**Source:** [huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx)
+
+| Model | Size | Files | Download URLs |
+|-------|------|-------|---------------|
+| **Parakeet V3 INT8** | ~639 MB | encoder-model.int8.onnx | [encoder-model.int8.onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.int8.onnx) |
+| | | decoder_joint-model.int8.onnx | [decoder_joint-model.int8.onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/decoder_joint-model.int8.onnx) |
+| | | vocab.txt | [vocab.txt](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/vocab.txt) |
+| **Parakeet V3 FP32** | ~2.37 GB | encoder-model.onnx | [encoder-model.onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.onnx) |
+| | | encoder-model.onnx.data | [encoder-model.onnx.data](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.onnx.data) |
+| | | decoder_joint-model.onnx | [decoder_joint-model.onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/decoder_joint-model.onnx) |
+| | | vocab.txt | [vocab.txt](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/vocab.txt) |
+
+**Parakeet features:**
+- Supports 25 languages
+- Optimized for CPU inference
+- INT8 variant recommended for 8GB RAM
+- FP32 variant for best quality (16GB+ RAM recommended)
+
+#### Whisper Models (ggerganov/whisper.cpp)
+**Source:** [huggingface.co/ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)
+
+| Model | Size | Download URL |
+|-------|------|--------------|
+| **Whisper Small** | ~465 MB | [ggml-small.bin](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin) |
+| **Whisper Medium** | ~1.43 GB | [ggml-medium.bin](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin) |
+| **Whisper Large v3 Turbo** | ~1.51 GB | [ggml-large-v3-turbo.bin](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin) |
+| **Whisper Large v3** | ~2.88 GB | [ggml-large-v3.bin](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin) |
+
+**Whisper features:**
+- English-focused (some multilingual support)
+- ggml format for efficient CPU/GPU inference
+- Small variant recommended for 8GB RAM
+- Medium/Large variants for 16GB+ RAM
+
+### Model Storage
+
+Models are stored in:
+```
+~/Library/Application Support/app.dictara/models/
+```
+
+All downloads include SHA-256 checksum verification to ensure integrity.
+
+---
+
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](.github/CONTRIBUTING.md) to get started.
