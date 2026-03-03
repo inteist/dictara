@@ -1556,6 +1556,7 @@ dependencies = [
 name = "dictara-keyboard"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "log",
  "macos-accessibility-client",
  "objc2-core-foundation",

@@ -49,6 +49,18 @@ fn check_accessibility() -> bool {
     macos_accessibility_client::accessibility::application_is_trusted()
 }
 
+/// Get the system uptime in seconds.
+/// This is used to detect when the system has woken up from sleep.
+fn get_system_uptime() -> u64 {
+    unsafe {
+        // Use clock_gettime with CLOCK_UPTIME_RAW to get system uptime
+        // This clock stops during sleep, so a jump indicates wake
+        let mut ts: libc::timespec = std::mem::zeroed();
+        libc::clock_gettime(libc::CLOCK_UPTIME_RAW, &mut ts);
+        ts.tv_sec as u64
+    }
+}
+
 /// Start grabbing keyboard events using CGEvent tap.
 ///
 /// This function blocks the current thread.
@@ -109,6 +121,7 @@ where
         // Start accessibility polling thread
         // This thread checks every 200ms if accessibility permission is still granted
         // If permission is revoked, it stops the run loop to prevent system freeze
+        // It also detects sleep/wake cycles and re-enables the event tap
         let stop_polling = Arc::new(AtomicBool::new(false));
         let stop_polling_clone = Arc::clone(&stop_polling);
 
@@ -116,20 +129,50 @@ where
             .name("accessibility-poll".to_string())
             .spawn(move || {
                 info!("Accessibility polling thread started");
+                let mut last_uptime = get_system_uptime();
+                let mut consecutive_failures = 0;
+                const MAX_FAILURES: u32 = 3;
+                
                 while !stop_polling_clone.load(Ordering::SeqCst) {
                     thread::sleep(ACCESSIBILITY_POLL_INTERVAL);
 
-                    if !check_accessibility() {
-                        error!("Accessibility permission lost (detected by polling), stopping event tap");
-                        let rl_ptr = RUN_LOOP_REF.load(Ordering::SeqCst);
-                        if !rl_ptr.is_null() {
-                            // SAFETY: The run loop pointer is valid because:
-                            // 1. The main thread is blocked on CFRunLoop::run()
-                            // 2. Cleanup only happens AFTER this thread is joined
-                            // CFRunLoop::stop is thread-safe
-                            (*rl_ptr).stop();
+                    let current_uptime = get_system_uptime();
+                    
+                    // Detect wake from sleep: uptime jumps forward significantly
+                    // (more than the poll interval + small tolerance)
+                    let uptime_diff = current_uptime.saturating_sub(last_uptime);
+                    if uptime_diff > 1 {
+                        // System woke up from sleep (uptime gap > 1 second)
+                        info!("System wake detected (uptime jump: {}s)", uptime_diff);
+                        
+                        // Re-enable the event tap
+                        let tap_ptr = TAP_REF.load(Ordering::SeqCst);
+                        if !tap_ptr.is_null() {
+                            CGEvent::tap_enable(&*tap_ptr, true);
+                            info!("Event tap re-enabled after sleep/wake cycle");
                         }
-                        break;
+                        consecutive_failures = 0;
+                    }
+                    
+                    last_uptime = current_uptime;
+
+                    // Check accessibility with some tolerance for transient failures
+                    if !check_accessibility() {
+                        consecutive_failures += 1;
+                        if consecutive_failures >= MAX_FAILURES {
+                            error!("Accessibility permission lost (detected by polling), stopping event tap");
+                            let rl_ptr = RUN_LOOP_REF.load(Ordering::SeqCst);
+                            if !rl_ptr.is_null() {
+                                // SAFETY: The run loop pointer is valid because:
+                                // 1. The main thread is blocked on CFRunLoop::run()
+                                // 2. Cleanup only happens AFTER this thread is joined
+                                // CFRunLoop::stop is thread-safe
+                                (*rl_ptr).stop();
+                            }
+                            break;
+                        }
+                    } else {
+                        consecutive_failures = 0;
                     }
                 }
                 info!("Accessibility polling thread stopped");
