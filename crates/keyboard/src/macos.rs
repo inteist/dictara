@@ -12,7 +12,7 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// How often to check if accessibility permission is still granted.
 const ACCESSIBILITY_POLL_INTERVAL: Duration = Duration::from_millis(200);
@@ -47,18 +47,6 @@ struct CallbackState {
 fn check_accessibility() -> bool {
     // Use the macos-accessibility-client crate's function
     macos_accessibility_client::accessibility::application_is_trusted()
-}
-
-/// Get the system uptime in seconds.
-/// This is used to detect when the system has woken up from sleep.
-fn get_system_uptime() -> u64 {
-    unsafe {
-        // Use clock_gettime with CLOCK_UPTIME_RAW to get system uptime
-        // This clock stops during sleep, so a jump indicates wake
-        let mut ts: libc::timespec = std::mem::zeroed();
-        libc::clock_gettime(libc::CLOCK_UPTIME_RAW, &mut ts);
-        ts.tv_sec as u64
-    }
 }
 
 /// Start grabbing keyboard events using CGEvent tap.
@@ -129,21 +117,21 @@ where
             .name("accessibility-poll".to_string())
             .spawn(move || {
                 info!("Accessibility polling thread started");
-                let mut last_uptime = get_system_uptime();
+                let mut last_poll = Instant::now();
                 let mut consecutive_failures = 0;
                 const MAX_FAILURES: u32 = 3;
                 
                 while !stop_polling_clone.load(Ordering::SeqCst) {
                     thread::sleep(ACCESSIBILITY_POLL_INTERVAL);
 
-                    let current_uptime = get_system_uptime();
+                    let now = Instant::now();
+                    let elapsed = now.duration_since(last_poll);
                     
-                    // Detect wake from sleep: uptime jumps forward significantly
-                    // (more than the poll interval + small tolerance)
-                    let uptime_diff = current_uptime.saturating_sub(last_uptime);
-                    if uptime_diff > 1 {
-                        // System woke up from sleep (uptime gap > 1 second)
-                        info!("System wake detected (uptime jump: {}s)", uptime_diff);
+                    // Detect wake from sleep: if elapsed time is much larger than poll interval,
+                    // the system was asleep (Instant continues counting during sleep)
+                    if elapsed > Duration::from_secs(1) {
+                        // System woke up from sleep
+                        info!("System wake detected (sleep duration: {:.1}s)", elapsed.as_secs_f32());
                         
                         // Re-enable the event tap
                         let tap_ptr = TAP_REF.load(Ordering::SeqCst);
@@ -154,7 +142,7 @@ where
                         consecutive_failures = 0;
                     }
                     
-                    last_uptime = current_uptime;
+                    last_poll = now;
 
                     // Check accessibility with some tolerance for transient failures
                     if !check_accessibility() {
